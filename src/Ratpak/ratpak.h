@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <concepts>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -29,7 +30,7 @@ struct number
     details::exponent_type exp = 0;
     bool neg = false;
 
-    constexpr number() noexcept(noexcept(details::mantissa_type)) = default;
+    constexpr number() noexcept(noexcept(details::mantissa_type())) = default;
     constexpr number(const number&) = default;
     constexpr number(number&&) noexcept = default;
     constexpr number& operator=(const number&) = default;
@@ -40,10 +41,16 @@ struct number
     {
         if constexpr (std::is_signed_v<V>)
         {
+#if _DEBUG
+            if (value == std::numeric_limits<V>::min())
+            {
+                throw std::logic_error{"can't find the positive representation for the min value."};
+            }
+#endif
             if (value < 0)
             {
                 neg = true;
-                value = -value;
+                value *= -1;
             }
         }
         do
