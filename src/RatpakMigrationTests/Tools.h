@@ -2,6 +2,7 @@
 
 // std
 #include <cstdint>
+#include <stdexcept>
 
 // old ratpak
 #include "../CalcManager/Ratpack/ratpak.h"
@@ -9,15 +10,23 @@
 // new ratpak
 #include "../Ratpak/ratpak.h"
 
-inline bool is_negative(PNUMBER pn)
+inline ratpak::details::sign_kind sign_kind(PNUMBER pn)
 {
-    return pn->sign == -1 ? true : false;
+    switch (pn->sign)
+    {
+    case 1:
+        return ratpak::details::sign_kind::positive;
+    case -1:
+        return ratpak::details::sign_kind::negative;
+    default:
+        throw std::logic_error{"bad sign value."};
+    }
 }
 
 template <size_t R>
 bool is_same(PNUMBER pn, ratpak::number<R> n)
 {
-    if (n.neg != is_negative(pn))
+    if (n.sign != sign_kind(pn))
     {
         return false;
     }

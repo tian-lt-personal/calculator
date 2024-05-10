@@ -19,6 +19,12 @@ using exponent_type = int32_t;
 using mantissa_digit_type = uint32_t;
 using mantissa_type = std::vector<mantissa_digit_type>;
 
+enum class sign_kind : int32_t
+{
+    positive,
+    negative
+};
+
 inline void trim_mantissa(mantissa_type& mant)
 {
     auto pos = std::ranges::find_if(std::ranges::reverse_view{mant}, [](mantissa_digit_type x) { return x != 0; });
@@ -37,7 +43,7 @@ struct number
 {
     details::mantissa_type mant;
     details::exponent_type exp = 0;
-    bool neg = false;
+    details::sign_kind sign = details::sign_kind::positive;
 
     constexpr number() noexcept(noexcept(details::mantissa_type())) = default;
     constexpr number(const number&) = default;
@@ -61,7 +67,7 @@ struct number
 #endif
             if (value < 0)
             {
-                neg = true;
+                sign = details::sign_kind::negative;
                 value *= -1;
             }
         }
@@ -77,7 +83,7 @@ struct number
     {
         if constexpr (std::is_unsigned_v<V>)
         {
-            if (neg)
+            if (sign == details::sign_kind::negative)
             {
                 throw std::logic_error{"error: wrong sign."};
             }
@@ -95,7 +101,7 @@ struct number
 
         if constexpr (std::is_signed_v<V>)
         {
-            if (neg)
+            if (sign == details::sign_kind::negative)
             {
                 return -result;
             }
@@ -128,8 +134,16 @@ number<R> add_num(number<R> a, number<R> b)
     number<R> c{static_cast<size_t>(cdigits + 1u)};
     c.exp = std::min(a.exp, b.exp);
 
-    // cy is the value of a carry after adding two `digits`
-    details::mantissa_digit_type cy = a.neg == b.neg ? 0 : 1;
+    // Figure out the sign of the numbers
+    auto compla = false;                 // compla is a flag to signal `a` is negative.
+    auto complb = false;                 // complb is a flag to signal `b` is negative.
+    details::mantissa_digit_type cy = 0; // cy is the value of a carry after adding two `digits`
+    if (a.sign != b.sign)
+    {
+        cy = 1;
+        compla = a.sign == details::sign_kind::negative;
+        complb = b.sign == details::sign_kind::negative;
+    }
 
     // Loop over all the digits, real and 0 padded. here we know `a` and `b` are aligned
     auto mexp = c.exp; // mexp is the exponent of the result.
@@ -147,8 +161,14 @@ number<R> add_num(number<R> a, number<R> b)
 
         // Handle complementing for a and b digit. Might be a better way, but
         // haven't found it yet.
-        da = a.neg ? static_cast<details::mantissa_digit_type>(R) - 1 - da : da;
-        db = b.neg ? static_cast<details::mantissa_digit_type>(R) - 1 - db : db;
+        if (compla)
+        {
+            da = static_cast<details::mantissa_digit_type>(R) - 1 - da;
+        }
+        if (complb)
+        {
+            db = static_cast<details::mantissa_digit_type>(R) - 1 - db;
+        }
 
         // Update carry as necessary
         cy = da + db + cy;
@@ -157,19 +177,19 @@ number<R> add_num(number<R> a, number<R> b)
     }
 
     // Handle carry from last sum as extra digit
-    if (cy && !(a.neg || b.neg))
+    if (cy && !(compla || complb))
     {
         *pc++ = cy;
     }
 
     // Compute sign of result
-    if (!a.neg && !b.neg)
+    if (!(compla || complb))
     {
-        c.neg = a.neg;
+        c.sign = a.sign;
     }
     else if (cy)
     {
-        c.neg = false;
+        c.sign = details::sign_kind::positive;
     }
     else
     {
@@ -177,7 +197,7 @@ number<R> add_num(number<R> a, number<R> b)
         // and all the digits need to be complemented, at one time an
         // attempt to handle this above was made, it turned out to be much
         // slower on average.
-        c.neg = true;
+        c.sign = details::sign_kind::negative;
         cy = 1;
         pc = c.mant.begin();
         for (size_t i = 0; i < cdigits; ++i)
