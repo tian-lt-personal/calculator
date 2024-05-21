@@ -67,10 +67,58 @@ TEST(ArithmeticTests, AddNum_Commutative)
         ASSERT_EQ(nc1, nc2);
         ASSERT_EQ(nc2, nc1);
         ASSERT_TRUE(is_same(oa, nc1));
+
         destroynum(oa);
         destroynum(ob);
     };
     RunInt32R10(0, 0);
+    RunInt32R10(0, 1);
+    RunInt32R10(-10, 10);
+    RunInt32R10(12345678, 87654321);
+    RunInt32R10(std::numeric_limits<int>::min() + 1, std::numeric_limits<int>::max());
+
+    constexpr auto RunUInt32R137 = [](uint32_t a, uint32_t b)
+    {
+        auto oa = Ui32tonum(a, 137);
+        auto ob = Ui32tonum(b, 137);
+        addnum(&oa, ob, 137);
+
+        ratpak::number<137> na{a}, nb{b};
+        auto nc1 = ratpak::add_num(na, nb);
+        auto nc2 = ratpak::add_num(nb, na);
+        ASSERT_EQ(nc1, nc2);
+        ASSERT_EQ(nc2, nc1);
+        ASSERT_TRUE(is_same(oa, nc1));
+
+        destroynum(oa);
+        destroynum(ob);
+    };
+    RunUInt32R137(0, 0);
+    RunUInt32R137(0, 1);
+    RunUInt32R137(12345678, 87654321);
+    RunUInt32R137(0, std::numeric_limits<uint32_t>::max());
+}
+
+TEST(ArithmeticTests, MulNum)
+{
+    constexpr auto RunInt32R10 = [](int a, int b)
+    {
+        auto oa = i32tonum(a, 10);
+        auto ob = i32tonum(b, 10);
+        mulnum(&oa, ob, 10);
+
+        ratpak::number<10> na{a}, nb{b};
+        auto nc = ratpak::mul_num(na, nb);
+        ASSERT_TRUE(is_same(oa, nc));
+
+        destroynum(oa);
+        destroynum(ob);
+    };
+    RunInt32R10(0, 0);
+    RunInt32R10(10, 0);
+    RunInt32R10(0, -10);
+    RunInt32R10(12345678, -87654321);
+    RunInt32R10(std::numeric_limits<int>::min() + 1, std::numeric_limits<int>::max());
 }
 
 TEST(ArithmeticTests, DISABLED_Heavy_AddNum_ScanValues)

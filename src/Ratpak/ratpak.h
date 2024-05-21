@@ -1,3 +1,25 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
+//-----------------------------------------------------------------------------
+//  Package Title  ratpak
+//  Copyright      (C) 1995-97 Microsoft
+//  Date           01-16-95
+//
+//
+//  Description
+//
+//     Contains number routines for add, mul, div, rem and other support
+//  and longs.
+//
+//  Special Information
+//
+//  ...........................................................................
+//
+//  Revised with modern C++ in 2024
+//
+//-----------------------------------------------------------------------------
+
 #pragma once
 
 #include <algorithm>
@@ -18,6 +40,7 @@ namespace details
 using exponent_type = int32_t;
 using mantissa_digit_type = uint32_t;
 using mantissa_type = std::vector<mantissa_digit_type>;
+using wide_mantissa_digit_type = uint64_t;
 
 enum class sign_kind : int32_t
 {
@@ -28,7 +51,19 @@ enum class sign_kind : int32_t
 inline void trim_mantissa(mantissa_type& mant)
 {
     auto pos = std::ranges::find_if(std::ranges::reverse_view{mant}, [](mantissa_digit_type x) { return x != 0; });
-    mant.erase(pos.base(), mant.cend());
+    if (pos.base() != mant.cbegin())
+    {
+        mant.erase(pos.base(), mant.cend());
+    }
+    else
+    {
+        mant = {0};
+    }
+}
+
+inline sign_kind operator*(sign_kind a, sign_kind b)
+{
+    return a == b ? sign_kind::positive : sign_kind::negative;
 }
 
 } // namespace details
@@ -116,6 +151,17 @@ bool is_zero(number<R> num)
     return std::ranges::all_of(num.mant, [](int32_t x) { return x == 0; });
 }
 
+//----------------------------------------------------------------------------
+//
+//    FUNCTION: add_num
+//
+//    DESCRIPTION: Does the number equivalent of $a + b$.
+//    Assumes radix is the base of both numbers.
+//
+//    ALGORITHM: Adds each digit from least significant to most
+//    significant.
+//
+//----------------------------------------------------------------------------
 template <size_t R>
 number<R> add_num(number<R> a, number<R> b)
 {
@@ -210,6 +256,93 @@ number<R> add_num(number<R> a, number<R> b)
 
     // Remove leading zeros, remember digits are in order of
     // increasing significance. i.e. 100 would be 0,0,1
+    details::trim_mantissa(c.mant);
+    return c;
+}
+
+//----------------------------------------------------------------------------
+//
+//    FUNCTION: mulnum
+//
+//    DESCRIPTION: Does the number equivalent of $a \times b$.
+//    Assumes radix is the radix of both numbers.  This algorithm is the
+//    same one you learned in grade school.
+//
+//----------------------------------------------------------------------------
+template <size_t R>
+number<R> _mul_num(number<R> a, number<R> b);
+template <size_t R>
+number<R> mul_num(number<R> a, number<R> b)
+{
+    constexpr auto quick_identity_check = [](number<R>& x)
+    { return x.mant.size() == 1 && x.mant[0] == 1 && x.exp != 0; };
+
+    if (!quick_identity_check(a))
+    {
+        if (!quick_identity_check(b))
+        {
+            return _mul_num(a, b);
+        }
+        else
+        {
+            return a;
+        }
+    }
+    else
+    {
+        return b;
+    }
+}
+template <size_t R>
+number<R> _mul_num(number<R> a, number<R> b)
+{
+    const size_t cdigits = a.mant.size() + b.mant.size() - 1;
+    number<R> c{static_cast<size_t>(cdigits + 1u)};
+    c.sign = a.sign * b.sign;
+    c.exp = a.exp + b.exp;
+
+    auto pa = a.mant.cbegin();
+    auto pc_offset = c.mant.begin(); // `pchcoffset`, is the anchor location of the next
+                                     // single digit multiply partial result.
+    size_t icdigit = 0;              // Index of digit being calculated in final result.
+    for (size_t i = 0; i < a.mant.size(); i++)
+    {
+        auto da = *pa++; // `da` is the digit from the fist number.
+        auto pb = b.mant.cbegin();
+
+        // Shift `pc`, and pchcoffset, one for each digit
+        auto pc = pc_offset++;
+        for (size_t j = 0; j < b.mant.size(); ++j)
+        {
+            details::wide_mantissa_digit_type cy = 0; // `cy` is the carry resulting from the addition of
+                                                      // a multiplied row into the result.
+            details::wide_mantissa_digit_type mcy =
+                static_cast<details::wide_mantissa_digit_type>(da) * *pb; // `mcy` is the resultant from a single
+                                                                          // multiply, AND the carry of that multiply.
+            if (mcy)
+            {
+                icdigit = 0;
+            }
+            // If result is nonzero, or while result of carry is nonzero...
+            while (mcy || cy)
+            {
+                // update carry from addition(s) and multiply.
+                cy += static_cast<decltype(cy)>(*(pc + icdigit)) + (mcy % static_cast<decltype(cy)>(R));
+
+                // update result digit from
+                *(pc + icdigit++) = static_cast<details::mantissa_digit_type>(cy % R);
+
+                // update carries from
+                mcy /= R;
+                cy /= R;
+            }
+            ++pb;
+            ++pc;
+        }
+    }
+
+    // prevent different kinds of zeros, by stripping leading duplicate zeros.
+    // digits are in order of increasing significance.
     details::trim_mantissa(c.mant);
     return c;
 }
